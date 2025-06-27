@@ -2,71 +2,82 @@ provider "azurerm" {
   features {}
 }
 
-resource "azurerm_resource_group" "jobportal_rg" {
-  name     = "jobportal-rg"
+resource "azurerm_resource_group" "main" {
+  name     = "example-resources"
   location = "East US"
 }
 
-resource "azurerm_virtual_network" "jobportal_vnet" {
-  name                = "jobportal-vnet"
+resource "azurerm_virtual_network" "main" {
+  name                = "example-vnet"
   address_space       = ["10.0.0.0/16"]
-  location            = azurerm_resource_group.jobportal_rg.location
-  resource_group_name = azurerm_resource_group.jobportal_rg.name
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
 }
 
-resource "azurerm_subnet" "jobportal_subnet" {
-  name                 = "jobportal-subnet"
-  resource_group_name  = azurerm_resource_group.jobportal_rg.name
-  virtual_network_name = azurerm_virtual_network.jobportal_vnet.name
+resource "azurerm_subnet" "main" {
+  name                 = "example-subnet"
+  resource_group_name  = azurerm_resource_group.main.name
+  virtual_network_name = azurerm_virtual_network.main.name
   address_prefixes     = ["10.0.1.0/24"]
 }
 
-resource "azurerm_app_service_plan" "jobportal_asp" {
-  name                = "jobportal-asp"
-  location            = azurerm_resource_group.jobportal_rg.location
-  resource_group_name = azurerm_resource_group.jobportal_rg.name
-  sku {
-    tier = "Standard"
-    size = "S1"
+resource "azurerm_network_interface" "main" {
+  name                = "example-nic"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+
+  ip_configuration {
+    name                          = "internal"
+    subnet_id                     = azurerm_subnet.main.id
+    private_ip_address_allocation = "Dynamic"
   }
 }
 
-resource "azurerm_app_service" "jobportal_webapp" {
-  name                = "jobportal-webapp"
-  location            = azurerm_resource_group.jobportal_rg.location
-  resource_group_name = azurerm_resource_group.jobportal_rg.name
-  app_service_plan_id = azurerm_app_service_plan.jobportal_asp.id
+resource "azurerm_linux_virtual_machine" "main" {
+  name                = "example-vm"
+  resource_group_name = azurerm_resource_group.main.name
+  location            = azurerm_resource_group.main.location
+  size                = "Standard_B1s"
+  admin_username      = "azureuser"
+  network_interface_ids = [
+    azurerm_network_interface.main.id,
+  ]
+  admin_password = "P@ssword1234!"
 
-  site_config {
-    always_on = true
+  os_disk {
+    caching              = "ReadWrite"
+    storage_account_type = "Standard_LRS"
+    name                 = "example-osdisk"
   }
 
-  app_settings = {
-    "WEBSITE_RUN_FROM_PACKAGE" = "1"
+  source_image_reference {
+    publisher = "Canonical"
+    offer     = "UbuntuServer"
+    sku       = "18.04-LTS"
+    version   = "latest"
   }
+
+  disable_password_authentication = false
 }
 
-resource "azurerm_storage_account" "jobportal_storage" {
-  name                     = "jobportalstor${random_string.suffix.result}"
-  resource_group_name      = azurerm_resource_group.jobportal_rg.name
-  location                 = azurerm_resource_group.jobportal_rg.location
-  account_tier             = "Standard"
-  account_replication_type = "LRS"
+resource "azurerm_public_ip" "main" {
+  name                = "example-publicip"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  allocation_method   = "Dynamic"
 }
 
-resource "random_string" "suffix" {
-  length  = 6
-  upper   = false
-  special = false
+resource "azurerm_network_interface_backend_address_pool_association" "main" {
+  network_interface_id    = azurerm_network_interface.main.id
+  ip_configuration_name   = "internal"
+  backend_address_pool_id = azurerm_lb_backend_address_pool.main.id
 }
 
-resource "azurerm_postgresql_flexible_server" "jobportal_db" {
-  name                   = "jobportal-db"
-  resource_group_name    = azurerm_resource_group.jobportal_rg.name
-  location               = azurerm_resource_group.jobportal_rg.location
-  administrator_login    = "jobportaladmin"
-  administrator_password = "P@ssw0rd12345!"
-  sku_name               = "B_Standard_B1ms"
-  storage_mb             = 32768
-  version                = "13"
-  delegated_subnet_id    = azurerm_subnet.job
+resource "azurerm_lb" "main" {
+  name                = "example-lb"
+  location            = azurerm_resource_group.main.location
+  resource_group_name = azurerm_resource_group.main.name
+  sku                 = "Basic"
+
+  frontend_ip_configuration {
+    name
